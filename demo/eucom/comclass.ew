@@ -1,0 +1,193 @@
+-- comclass.ew
+-- Helper classes to be used with OOEU and EuCOM
+-- Matt Lewis
+
+include eucom.ew as eucom
+
+constant
+oleaut32 = open_dll( "oleaut32.dll" ),
+SysAllocString = define_c_func( oleaut32, "SysAllocString",{ C_POINTER },
+    C_LONG ),
+SysFreeString = define_c_proc( oleaut32, "SysFreeString", { C_POINTER} ),
+SysStringLen = define_c_func( oleaut32, "SysStringLen", { C_POINTER },C_POINTER )
+
+-- This is a class for using BStrings.
+global euclass Bstr( object s )
+	function alloc()
+	    Bstr pbstr
+	    atom lpwstr
+	    integer count
+	    
+	    this = ansi_to_unicode( this ) & 0
+	    
+	    lpwstr = w32acquire_mem( 0, this )
+	    pbstr = c_func( SysAllocString, { lpwstr } )
+	    w32release_mem( lpwstr )
+	    
+	    return pbstr
+	end function
+	
+	procedure free()
+		c_proc( SysFreeString, {this } )
+	end procedure
+	
+	function peek( )
+	    integer len
+	    len = c_func( SysStringLen, { this } )
+	    return unicode_to_ansi( peek({ this, len * 2 }) )
+	end function	
+end euclass
+
+
+
+-- Generic variant class.
+global euclass Variant( object v )
+	function create( integer vt )
+		Variant v
+		v = allocate( 16 )
+		make_variant( v, vt, this )
+		return v
+	end function
+	
+	procedure make( integer vt, atom v )
+		make_variant( this, vt, v )
+	end procedure
+	
+	function value()
+		return get_variant( this )
+	end function
+	
+	procedure free()
+		free( this )
+	end procedure
+	
+	function vt()
+		return peek4u( this )
+	end function
+	
+	function pval()
+		return peek4u( this + 8 )
+	end function
+end euclass
+
+-- This is for a Variant that contains a VT_BSTR.
+global euclass VBstr( Variant b )
+	function create()
+		Bstr str
+		str = Bstr.alloc( this )
+		return Variant.create( str, VT_BSTR )
+	end function
+	
+	procedure free()
+		Bstr b
+		b = peek4u( this + 12 )
+		b.free()
+		free(this)
+	end procedure
+end euclass
+
+-- This class is for safearrays.
+global euclass SafeArray( object s )
+	
+	function create( integer vt )
+		return create_safearray( this, vt )
+	end function
+	
+	function value()
+		return get_array( this )
+	end function
+	
+	procedure destroy()
+		object ok
+		ok = destroy_safearray( this )
+	end procedure
+	
+end euclass
+
+-- This is the generic EuCOM object class.  It can be either a fully referenced
+-- EuCOM object (i.e., an integer) or a sequence containing {this, pvtbl}.  You
+-- may use the indirect() method to convert from a this pointer to the proper form,
+-- or the ref() method to convert the object to a normal EuCOM object.  You should
+-- not attempt to access the pThis or pVtbl members unless you know that the object
+-- is of the correct form.
+global euclass COM( object o )
+	atom pThis, pVtbl
+	
+	-- This function assumes that 'this' is a EuCOM object
+	function call( object iid, integer iid_func, sequence args )
+		return call_interface( this, iid, iid_func, args )		
+	end function
+	
+	-- This function assumes the {this,pvtbl} form:
+	function call( integer iid_func, sequence args )
+		return call_interface_ptr( this.pThis, this.pVtbl, iid_func, args )	
+	end function
+	
+	-- Just like regular invoke, except that dispnames can be an atom if there is only one.
+	-- Also, you can leave off the extra {} for args and argtypes.  argtypes will be checked
+	-- to see if it is an atom.  If so, *both* args and argtypes will be put into a sequence,
+	-- so don't try to do one without the other.  You may also pass BSTRs in as sequences,
+	-- and invoke() will handle allocation and freeing.
+	function invoke( object dispnames, object args, object argtypes, integer disp_method )
+		sequence free_list
+		object result
+		if atom(dispnames) then
+			dispnames = {dispnames}
+		end if
+		if atom( argtypes ) then
+			args = {args}
+			argtypes = {argtypes}
+		end if
+		
+		free_list = {}
+		for i = 1 to length( argtypes ) do
+			if argtypes[i] = VT_BSTR then
+				args[i] = Bstr.alloc( args[i] )
+				free_list &= args[i]
+			end if
+		end for
+		result = invoke( this, dispnames, args, argtypes, disp_method )
+		for j = 1 to length(free_list) do
+			Bstr.free( free_list[j] )
+		end for
+		return result
+	end function
+	
+	function create( integer clsid_ix )
+		return create_com_object( clsid_ix )
+	end function
+	
+	function ref( integer clsid_ix, atom obj )
+		return ref_com_object( clsid_ix, obj )
+	end function
+	
+	function release()
+		if sequence( this ) then
+			return this.call( 2, {})
+		else
+			return this.call( IUnknown, 2, {})
+		end if
+		
+	end function
+	
+	function indirect()
+		return this & peek4u(this)
+	end function
+end euclass
+
+-- This is a class for ActiveX objects.  It inherits from the COM class,
+-- so all of those methods are available to ActiveX objects.
+global euclass ActiveX( COM a )
+
+	function active( integer clsid_ix )
+		return get_active_object( clsid_ix )
+	end function
+
+	function create( integer clsid_ix, atom hwnd_parent, integer x,
+		integer y, integer cx, integer cy )
+		
+		return create_com_control( clsid_ix, hwnd_parent, x, y, cx, cy )
+	end function
+end euclass
+
+

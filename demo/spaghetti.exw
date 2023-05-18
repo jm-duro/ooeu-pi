@@ -1,0 +1,33 @@
+with strict_goto
+
+goto "start"
+  : "start"
+  printf(1, ": \"%s\"\n", {"start"} )
+  goto "spaghetti"
+
+  :1
+  printf(1, ": %d\n", 1 )
+constant  sequence_label = {1,{2}}
+  goto {1,{2}}
+  abort(0)
+  goto "start"
+  
+  object label
+
+  : label
+  printf( 1, ": %d\n", label )
+  label = "end"
+  goto label
+
+  : "spaghetti"
+  printf( 1, ": \"%s\"\n", {"spaghetti"})
+  label = 5
+  goto 4 + 1
+  
+  : "end"
+  printf(1,": \"%s\"\n",{"end"})
+  goto 1
+  
+  : sequence_label
+  puts(1, ": " ) print(1, {1,{2}}) puts(1,"\n")
+

@@ -1,0 +1,62 @@
+with trace
+
+-- Even though this gets included by eval, you can't use it directly in
+-- code below, because the include doesn't happen at compile time.  It has
+-- to wait until run time.
+? eval( "include gl.e\n")
+
+if not eval("? o") then
+	printf(2,"Eval Error: %s\n", {eval_error()})
+end if
+
+
+atom a
+a = 1
+trace(1) 
+? var_id("a")
+sequence code
+code = 		"procedure bar()\n" &
+			"\tputs(1,\"bar!\\n\")\n" &
+			"end procedure\n" &
+			"bar()\n" &
+			"euclass generic( object g )\n" &
+			"    procedure method()\n" &
+			"        puts(1,\"Generic Method dynamically defined!\\n\")\n" &
+			"    end procedure\n" &
+			"end euclass\n" &
+			"generic G\n" &
+			"G = 0\n" &
+			"G.method()\n"
+
+
+printf(1, "rid(foo) = %d\n", routine_id("foo"))
+
+global procedure foo()
+	integer f
+	f = 3
+	puts(1,"foo!\n")
+	? f
+	if eval("? f") = 0 then
+		printf(2,"Eval Error: %s\n", {eval_error()})
+	end if
+	for i = 1 to 1 do
+		if eval("printf(1,\"i = %d\\n\",i)") = 0 then
+			printf(2,"Eval Error: %s\n", {eval_error()})
+		end if
+	end for
+?{2}
+	f = eval("?{2}")
+	if not eval(code) then
+		printf(2,"Eval Error: %s\n", {eval_error()})
+	end if
+end procedure
+foo()
+
+
+
+? eval( "t1 x\nx = 5\n? x\n? {var_id(\"x\")}\n")
+
+printf(1,"var_id(\"x\") = %d\n", {var_id("x")})
+
+? eval( "Global.GlobalMethod(1)")
+

@@ -1,0 +1,38 @@
+class.ex:117 
+attempt to divide by 0
+
+
+
+Global & Local Variables
+
+ class.ex:
+    me = {
+          {77'M',97'a',116't',116't'},
+          {69'E',117'u',112'p',104'h',111'o',114'r',105'i',97'a'},
+          0
+        }
+    you = {
+           {70'F',114'r',101'e',100'd'},
+           {},
+           0,
+           {67'C'}
+         }
+
+ /home/pi/Téléchargements/euphoria/include/machine.e:
+    mem = 28743232
+    check_calls = 1
+
+
+Traced lines leading up to the failure:
+
+class.ex:75		end procedure
+/home/pi/Téléchargements/euphoria/include/machine.e:156	mem = allocate(4)
+/home/pi/Téléchargements/euphoria/include/machine.e:58	    return x >= 1
+/home/pi/Téléchargements/euphoria/include/machine.e:108	    return machine_func(M_ALLOC, n)
+/home/pi/Téléchargements/euphoria/include/machine.e:307	check_calls = 1
+class.ex:114	? routine_id("my_crash")
+class.ex:115	crash_routine(routine_id("my_crash"))
+/home/pi/Téléchargements/euphoria/include/machine.e:244	    machine_proc(M_CRASH_ROUTINE, proc)
+/home/pi/Téléchargements/euphoria/include/machine.e:245	end procedure
+class.ex:117	? 1/0
+

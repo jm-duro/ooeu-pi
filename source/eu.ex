@@ -1,0 +1,1226 @@
+-- Object Oriented Euphoria v1.9.0
+-- by Matt Lewis
+-- Based on:
+-- Euphoria 2.5
+-- A Euphoria Interpreter written 100% in Euphoria
+--
+-- usage:
+--        ex ex.ex prog.ex     -- run a Euphoria program for DOS
+--        exw ex.ex prog.exw   -- run a Euphoria program for Windows
+--        exu ex.ex prog.exu   -- run a Euphoria program for Linux/FreeBSD
+
+-- You can make this into a stand-alone .exe using the binder or the
+-- Euphoria To C Translator. When translated/compiled it will run
+-- much faster, but not as fast as the official RDS interpreter
+-- which uses the same Euphoria-coded front-end, combined 
+-- with a high-performance back-end carefully hand-coded in C.
+
+--/makedoc title OOEU documentation
+
+without type_check
+without warning
+global constant TRUE = 1, FALSE = 0
+
+global constant EMBEDDED = FALSE
+global object the_object
+
+global constant INTERPRET = TRUE,
+		TRANSLATE = FALSE,
+		BIND = FALSE
+		
+global constant EXTRA_CHECK = FALSE 
+
+-- standard Euphoria includes
+include misc.e
+include wildcard.e
+
+include machine.e
+global procedure Print( integer fn, object o )
+	print( fn, o )
+end procedure
+
+-- a nice pretty print file
+include print.e
+include sprint.e
+
+-- INTERPRETER front-end
+include global.e
+include reswords.e
+include error.e
+include keylist.e
+include symtab.e
+include scanner.e
+include emit.e
+include parser.e
+-- INTERPRETER back-end, written in Euphoria
+include execute.e   
+include sequencef.e
+
+-- main program:
+include main.e
+
+if debugger > 0 then
+	c_proc( cleanup_cb, {} )
+end if
+--Introduction
+--------------------------------
+
+--/topic Introduction
+--/info
+--/code
+-- <a href="http://ooeu.sourceforge.net">Object Oriented Euphoria v1.9.0</a>
+-- based on RDS Euphoria 2.5 PD interpreter
+--by <a href="mailto:mattlewis@users.sourceforge.net">Matt Lewis</a>
+--
+--
+--LICENSE:
+--This code is released as freeware, and you may use it however you like.
+--However, you must give RDS and Matt Lewis credit for the original source.
+--You may modify any code, so long as you do not take credit for the original
+--source.
+--
+--DISCLAIMER:
+--THIS SOFTWARE IS PROVIDED ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES,
+--INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY
+--AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
+--AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY,
+--OR CONSEQUENTIAL DAMGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+--SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFIT; OR BUSINESS
+--INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+--CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+--ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+--POSSIBILITY OF SUCH DAMAGE.
+--/endcode
+--Thanks to RDS for releasing the PD version of the Euphoria interpreter.
+--
+--Object Euphoria adds object oriented capabilities to Euphoria.  The goal of this 
+--project is to accomplish interesting and useful enhancements to the Euphoria
+--front end, without having to change anything in the back end (or at least as little 
+--as possible).  This interpreter 
+--outputs standard RDS Intermediary Language (IL) code that could in theory be run
+--by the RDS optimized Euphoria back end.  It can also preprocess code to allow an
+--application originally coded in Object Euphoria to be preprocessed, interpreted, 
+--bound and compiled using the RDS executables.  (There are exceptions to this,
+--listed under /"RDS Incompatible Features" below.)
+--
+--As-is, this code allows you to use some object oriented techniques with Euphoria,
+--without the added overhead or clumsy syntax that an added Object Oriented library
+--requires.  You may also create bound or shrouded applications from your code without
+--requiring the RDS binder.
+--
+--
+--The source versions of OOEU require Euphoria v2.5.  The binary versions are self-contained, although
+--you may need the standard libraries distributed by <a href="http://www.rapideuphoria.com">RDS</a>.
+
+--Change Log
+--------------------------------
+
+--/topic Change Log
+--/info
+--History
+--/code
+-- v1.9.0 * Redirection of STDOUT to debugger
+--       * /find_from(), /match_from()
+--        * Fixed debugger crash when displaying long variable values.  Limited
+--          display to 60,000 characters.
+--        * Fixed bug in crash routine
+--        * Fixed parser bug that didn't identify methods correctly if they had the
+--          same name as a class.
+--
+-- v1.8.1 * Added namespace qualifications to FUNC to avoid conflicts with matheval
+--        * Improved intialization when embedded
+--        * Fixed bug that caused a crash if an embedded routine executed any other
+--          embedded code
+--        * Trace will now properly trace code on the same line as an if-then or else
+--        * Variable type info is always saved in a shrouded file
+--        * Fixed parsing bug that incorrectly parsed a floating point number that 
+--          started with the decimal point
+--        * Debugger allows display of subscripts, horizontal scrolling for the watch
+--          list, and copy watched variables (using CTRL-C) to the clipboard
+--        * Fixed some cases where debugger wasn't being cleaned up upon exit and 
+--          caused a (harmless, but annoying) machine exception
+--        * Can alter variable values from the debugger
+--
+-- v1.8.0 * Pass by reference added as non-RDS compatible feature
+--        * Debugger no longer crashes on app close under Windows
+--       * Debugger uses its own copy of wxEuphoria dll/so
+--        * Debugger will display subscripts
+--        * Fixed preprocessor bugs
+--       * OOEU can now be embedded in other Euphoria applications (see /Embedding)
+--
+-- v1.7.1 * Fixed bug when using constructors of class members
+--        * Procedures that didn't use goto could cause a crash
+--        * Parser recognizes that subscripted sequences are really objects when
+--          considering polymorphism of member functions
+--        * Fixed preprocessing bugs
+--        * Fixed 'sequence of' bugs
+--        * Preprocesses literal arguments to routine_id() to proper routine decoration
+--        * Functions (and methods) may define a return type, which will be considered
+--          for polymorphism purposes
+--
+--v1.7.0 * /goto statement now supported
+--        * Constructors can be created by making method functions with the same name
+--          as a class.
+--        * Fixed preprocessing bugs.
+--
+-- v1.6.0 * Can define variables of type 'sequence of ClassName'
+--        * Debugger not loaded until required
+--        * Source code sync'd with PD 2.5 Official Version (minor compared to beta changes)
+--       * /continue keyword for loops
+--
+-- v1.5.1 * Fixed bug with member on LHS of assignment, and a member in parameters of a
+--          function call.
+--        * Methods can be called recursively
+--        * Eliminated erroneous warnings when members not used in methods
+--
+-- v1.5.0 * eval'ed code won't leak memory if without trace is in effect on the call to eval()
+--        * Fixed more preprocessor bugs
+--        * Fixed bug with method calls on data members
+--       * /var_id(), /read_var(), /write_var(), /dump_variables()
+--        * Fixed shrouding bugs (now using shrouded format 2)
+--       * Fixed error messages returned by /eval_error()
+--
+-- v1.4.1 * Incorporated RDS 2.5 beta changes
+--        * Fixed bug: polymorphism didn't work if a sequence was subscripted from within
+--          parameters of a method
+--        * On a crash, details are sent to ooeu.err, and normal file error dump
+--          is sent to ex.err for the program being run
+--        * Fixed bugs in preprocessor.  Now handles whitespace between tokens better.
+--
+-- v1.4.0 * Data members for classes
+--
+-- v1.3.1 * eval() fixed, error handling improved
+--
+-- v1.3   * Code with eval() can be shrouded
+--        * Modified shroud format
+--        * Added -c option to shroud without deleting any symbols
+--        * Experimental -i option to include files shrouded with the -c option
+--        * Included dis.ex, which is an il code dissasembler
+--        * Tracing module now updates privates and changing variables automatically
+--        * Tracing API modified
+--        * routine_id is now zero-based
+--        * Callbacks received while control has been handed off to the tracing module
+--          are executed, but not traced.  With GUI programs and event handling, this
+--          could cause crashes previously.
+--
+-- v1.2   * First stab at an eval()
+--        * Fixed binder bug
+--        * Unlimited callbacks through asm
+--        * New shrouding format
+--
+-- v1.1   * Preprocessor option to convert ooeu code to standard RDS code
+--        * Methods called like handle class.method() were not parsed correctly
+--        * Fixed bug when method name was same as previous routine name
+--        * Now an ex.err file has the traceback of the last 10 lines like the
+--          RDS interpreter does (shrouded code will do this, too, with -full_debug option)
+--        * Initial tracing support through dll
+--       
+-- v1.0   * First release
+--/endcode
+
+--Getting Started
+-----------------------------------------
+
+--/topic Getting Started
+--/info
+--What should I do?
+--
+--If you downloaded executables, you can put them in your %EUDIR%\bin\ directory and
+--run them from the command line just like you would with the normal RDS interpreters.
+--I recommend putting the source in its own directory.  You can then develop other 
+--programs in the same directory, and run them:
+--/code
+--   exw eu.ex my_app.exw
+--/endcode
+--This can get messy, however.  It is recommended that you either put the code that you're 
+--working on in a subdirectory or a sibling directory of the directory where you put the
+--source.  Then you can run the app:
+--/code
+--  exw eu.ex subdirectory\my_app.exw
+-- exu eu.ex ../siblingdirectory/my_app.exu
+--/endcode
+--There are several demos included to demonstrate the features of ooeu:
+--<ul>
+--/li class.ex
+--/li eval.exw
+--/li shape.ex
+--</ul>
+--If you've downloaded the binary files, you'll need to put them in your path (on Windows,
+--you can simply put them all in your euphoria\bin directory).  Under Linux, you should put
+--all of the shared libraries (.so files) in the /usr/lib directory.  You'll need to have 
+--root access to do this.  Here is a list of the binary files, and the recommended place
+--to do put them:
+--<ul>
+--/li Interpreter (oexu/oexw) Put in your euphoria/bin directory, where you have your
+--normal Euphoria interpreter.
+--/li Debugger wxEuphoria Library (wxooeu.dll/so) Put the dll in your euphoria/bin directory, and the so in 
+--/usr/lib.
+--/li Debugger Library (ooeu_trace.dll/so) Put the dll in your euphoria/bin directory, and the so in 
+--/usr/lib.
+--/li Embedded Library (libooeu.dll/so)  Put the dll in your euphoria/bin directory, and the so in 
+--/usr/lib.
+--</ul>
+
+--Class Specification
+-------------------------------
+
+--/topic Class Specification
+--/info
+--How to declare a class
+--
+--Classes are defined within a euclass/end euclass structure, similar to a routine.
+--Within the euclass/end euclass, data members and methods may be defined.  Members
+--may be defined anywhere in a class specification (i.e., they can appear after methods
+--are defined.  Members may be of any type, including other classes.  The class data 
+--type must be a sequence if you define any data members, because the members are elements 
+--in the sequence.  In fact, the preprocessor simply maps these to constants, which are 
+--used to subscript the class instance.
+--
+--Classes which are derived from other classes inherit all methods and members.  You can
+--overload methods.  It is possible, though questionable, to duplicate an inherited member.  
+--The member that was the last declared will always have precedence.  The only way to access
+--the inherited member is to explicitly subscript (see section on Dot Notation).
+--
+--You can specify the return type of a member function by adding a colon (':') followed by
+--the type after the function name.  This will be used for polymorphism purposes when a 
+--member function is used as an argument for another method call.
+--/code
+--global euclass ClassName( ClassDataType x ) 
+--	MemberDataType m
+--	
+--  function ClassName() : ClassName
+--
+--  end function
+--
+--	function fMethod() : sequence
+--	
+--	end function
+--	
+--	function fMethod( atom a ) : atom
+--	
+--	end function
+--	
+--	procedure pMethod()
+--	
+--	end procedure	
+--
+--end euclass
+--
+--ClassName instance
+--instance = SomeValue
+--
+--instance.pMethod( instance.fMethod( instance.fMethod() ) )
+--/endcode
+--To create an instance of a class, declare a variable with the type of the class:
+--/code
+--  ClassName aClassNameInstance
+--/endcode
+--You may also declare variables (and members) as 'sequence of' a class type.  This allows
+--you to refer to elements in the sequence as instances of the specified class:
+--/code
+--  sequence of SomeClass s
+--    -- ...
+--  s[1].Method()
+--/endcode
+
+--Decoration
+------------------------------
+
+--/topic Decoration
+--/info
+--How does OOEU manage naming conflicts?
+--
+--All routines in a class get decorated so that proper polymorphism can take place.
+--An '@' will be appended to the routine name, followed by the datatypes of the
+--parameters (o: object, a: atom, i: integer, s: sequence, @ClassName@: instance of some class,
+--!UserDefinedType!: a user defined type).
+--Also each method will have a 'this' parameter of the class' type automatically added.
+--It won't show in the source, but can be used (like in C++).  It will show up in any debug reports.
+--
+--The routine signatures will be used to allow for a type of polymorphism based on the arguments
+--supplied.  The best match for the routine will be called.  Since Euphoria isn't very strict with
+--types, there may be ambiguity as to the actual data types being used.  For instance, you might 
+--use an object parameter, where methods exist for either an atom or a sequence.  Also, since 
+--a function can return anything, any parameter that is created as a temp from a function return
+--will be treated as an object.  If there are multiple methods that match up equally well, one
+--will be arbitrarily picked, and a warning will be generated.  You may receive run time 
+--type check errors because of this.
+--
+--To get around this limitation, you can specify the return type of a function.  This is used
+--solely for purposes of polymorphism.  There is no additional type checking of the actual value 
+--returned by your function.  A colon (':') following the function declaration, followed by a
+--variable type or a euclass name id used to define the return type:
+--/code
+--ex:
+--  function foo() : sequence
+--      return "foo"
+--  end function
+--
+--  euclass bar( sequence b )
+--      function bar() : bar
+--          return {}
+--      end function
+--  end euclass
+--/endcode
+--You can use routine_id() on methods, but will need to pass the fully decorated routine name
+--(obviously, this won't work after preprocessing--you'll need to replace all '@'s and '!'s with
+-- '_'s):
+--/code
+--    id = routine_id( "method@class@a!my_type!si" )
+--/endcode
+--However, routines in a local class will only be visible from within the file itself, unless 
+--the routine itself is declared global, even if other global classes inherit from the class.
+--
+--Data members are decorated with the @ClassName as well.  You can see the subscript value of
+--a data member in trace mode by displaying ClassName@MemberName as a variable.
+
+
+
+--Scope
+----------------------------
+
+--/topic Scope
+--/info
+--Class scopes
+--
+--Class methods will have the same scope as their classes.  However, inherited routines from
+--local classes will be treated the same as the calling class.
+
+--Inheritance
+-----------------------------
+
+--/topic Inheritance
+--/info
+--Deriving classes from other classes
+--Classes can inherit from one super class (which can in turn inherit from other classes).
+--Methods from super classes will be called if the method isn't overridden.  Inheritance
+--is defined by creating the class' datatype as some other class:
+--/code
+--    euclass foo( integer f )
+--        ...
+--    end euclass
+--
+--    euclass bar( foo b )
+--        ...
+--    end euclass
+--/endcode
+
+--Dot notation
+--------------------------------
+
+--/topic Dot notation
+--/info
+--Using Object Oriented Features
+--
+--Dot notation:
+--/code
+--  object.method()
+--  object.member
+--  ? object.member
+--  object.member.method()
+--  object.member.submember.method()
+--  ...etc...
+--/endcode
+--You may also get the value of a member's subscript by using the euclass name as the
+--instance:
+--/code
+--   ? ClassName.MemberName
+--/endcode
+--This preprocesses to:
+--/code
+--   ? ClassName_MEMBER_MemberName
+--/endcode
+--These two would be equivalent: 
+--/code
+--   ? MyInstance.MemberName
+--   ? MyInstance[ClassName.MemberName]
+--/endcode
+--In the case where duplicate members have been declared, the last declared member becomes
+--the defaul.  The only way to access an earlier declared member is to explicitly subscript it:
+--/code
+--    euclass foo( sequence s )
+--        integer x, y
+--    end euclass
+--
+--    euclass bar( foo f )
+--        integer x
+--    end euclass
+--
+--    bar b
+--    b = {1,2,3}
+--    ? b.x        -- will print 3 (because .x refers to the bar.x member)
+--    ? b[foo.x]   -- will print 1
+--/endcode
+
+--Casting
+------------------------------
+
+--/topic Casting
+--/info
+--Using data in Object Oriented ways
+--
+--In order to cast and use a variable as a class, you can either assign it to
+--a variable that is of the class type, or call it in a method call with the
+--name of the class as the instance, and by adding the variable to be cast 
+--as the first parameter:
+--/code
+--    euclass Something( atom s )
+--        -- ...
+--    end euclass
+--
+--    atom a
+--    Something x
+--    a = 5
+--    x = a
+--    x.Method()
+--    Something.Method(a)
+--/endcode
+
+--Construction and Destruction
+-------------------------------------------
+
+--/topic Construction and Destruction
+--/info
+--Initializing and destroying objects
+--
+--Constructors can be created by making a method with the same name as the class.  You
+--can create multiple constructors, as long as they take different numbers or types
+--of parameters.
+--
+--There is no inherent need for destructors, since Euphoria automatically garbage collects
+--normal Euphoria data.  You can make a custom method to handle any necessary cleanup, but
+--it must be manually called.
+--/code
+--    euclass Something( atom x )
+--        function Something()
+--        -- ignore the this variable...
+--            return allocate(4)
+--        end function
+--
+--        procedure destroy()
+--            free(this)
+--        end procedure
+--    end euclass
+--
+--    Something s
+--    s = Something.create(0) -- note that this argument must pass typechecking!
+--/endcode
+
+--Binding and Shrouding
+-----------------------------------------
+
+--/topic Binding and Shrouding
+--/info
+--Standalone executables
+--
+--You can bind or shroud code so that it can start up faster later (the parsing is 
+--already done).  This is done by using command line options:
+--/code
+--  -s shroud
+--  -c shroud without deleting any symbol information
+--  -b bind
+--/endcode
+--The option must come before your source file:
+--/code
+--  exw eu.ex -s my_file.exw
+--  oexw -c win32lib.ew
+--  oexw -b my_file.exw
+--/endcode
+--When shrouding, the file will have the same base name, but with the extension ".oe".
+--A bound file will have the ".exe" extension added on Windows and DOS, and there
+--will be no extension for Linux.  You must bind using an executable
+--(bound or compiled should be fine) version of the interpreter, since that executable will
+--have the shrouded code appended to it.  The resulting file will be in the same directory
+--as the source file.
+--
+--Additionally, immediately after the -s or -b option, you may specify the -full_debug
+--option.  This will preserve the source lines for lines where "with trace" is in effect,
+--and you will get a normal traceback of the last 10 lines in the ex.err file.
+
+--Preprocessing
+-------------------------------------------
+
+--/topic Preprocessing
+--/info
+--Using OOEU with RDS Eu
+--
+--ooeu code (that doesn't use anything listed under /"RDS Incompatible Features" can be 
+--preprocessed into standard RDS Euphoria code.  This is accomplished by 
+--using the '-p' command line option.  A subfolder named 'preprocess' will be created 
+--under the directory of the main source file.  Any files which use ooeu specific
+--syntax will be modified and saved in this folder.  All other files will remain unchanged.
+--
+--The lines declaring classes will be commented out (so don't put anything else on these
+--lines).  Methods will be made global if they belong to a global class.  Method names will
+--be changed to the appropriate decoration, with @'s and !'s changed to underscores.  
+--Method calls will be properly decorated, and parameters will be moved to their proper
+--Euphoria places.  If literal arguments are passed to routine_id(), the preprocessor
+--will properly redecorate routine names.  If you pass variables, then you will need to 
+--change all @'s and !'s to _'s manually after preprocessing.
+--
+--You should be able to run, shroud, bind or translate the processed files with the standard, 
+--speedy RDS Euphoria backend (you may need to copy them or other files because the processed
+--files will be in a different directory).
+
+--RDS Incompatible Features
+---------------------------------------
+
+--/topic RDS Incompatible Features
+--/info
+--eval, var_id, etc
+--
+--These are features that have been added to OOEU that emit IL code that is not compatible with
+--RDS Euphoria.  This means that you cannot use the preprocessor function with any code
+--that uses these features.
+--
+--If you would like for routine_id() to be able to do forward referencing, change the
+--value of the constant FORWARD_ROUTINE_ID to TRUE (it's located near the bottom of
+--global.e).  Doing this doesn't produce incompatible IL code, but causes different 
+--behavior than RDS Euphoria, so your application might not run the same way on OOEU and
+--RDS Euphoria.
+
+--/topic RDS Incompatible Features
+--/func eval( sequence code )
+--
+--Returns 1 if parsing was successful, and the code was executed, or zero if the code had
+--errors.  You cannot have an eval() statement inside of another eval() statement.  Code
+--within an eval statement is treated like top level code, except that if you call eval
+--from within a procedure, the toplevel code will be able to access any loop and private
+--variables that are within scope.  
+--
+--You can define procedures, functions and euclasses within an eval, and you can also
+--include an entirely new file.  Files included through eval will be dynamically added
+--to the interactive debugger.  Anything defined within an eval will only be in scope
+--inside of another eval, except that you can set a routine_id so that dynamic routines
+--may be called from outside of an eval:
+--/code
+--   integer rid, ok
+--   ok = eval( "procedure foo()\n" &
+--              "    puts(1,\"foo!\\n\")\n" &
+--              "end procedure\n" &
+--              "rid = routine_id(\"foo\")")
+--   call_proc( rid, {} )
+--/endcode
+--
+
+--/topic RDS Incompatible Features
+--/func find_from( object x, sequence s, integer i )
+--
+--Extends the native find() function by allowing the specification of an index at 
+--which to start searching.  This function avoids the need to slice the sequence 
+--and adjust the returned index.
+--/code
+--  ? find_from( x, s, i )  -- this is equivalent to ? find( x, s[i..$] )
+--/endcode
+
+
+--/topic RDS Incompatible Features
+--/func match_from( sequence x, sequence s, integer i )
+--
+--Extends the native match() function by allowing the specification of an index at 
+--which to start searching.  This function avoids the need to slice the sequence 
+--and adjust the returned index.
+--/code
+--  ? match_from( x, s, i )  -- this is equivalent to ? match( x, s[i..$] )
+--/endcode
+
+--/topic RDS Incompatible Features
+--/func eval_error()
+--
+--Returns the text of a compile-time error that occured parsing the eval statement.
+
+--/topic RDS Incompatible Features
+--/func var_id( sequence name )
+--
+--Returns a variable id that can be used with /read_variable() and /write_variable().
+--Unlike routine_id(), var_id() can forward reference variables.  This is necessary
+--in order to expose variables created in a call to /eval().
+
+--/topic RDS Incompatible Features
+--/keyword continue
+--
+--Used within loops to cease execution of the current loop and jump back to the
+--begining of the loop.  Be careful when used in /b while loops, since the loop variable
+--isn't automatically changed for each execution of a loop (as /b for variables are), and
+--you could create an infinite loop.
+
+--/topic RDS Incompatible Features
+--/func read_var( integer vid )
+--
+--Returns the value of the variable with the variable id /i vid.
+
+--/topic RDS Incompatible Features
+--/proc write_var( integer vid, object val )
+--
+--Sets the value of the variable with variable id /i vid to /i val.
+
+--/topic RDS Incompatible Features
+--/func dump_vars()
+--
+--Returns a sequence containing information on all variables in the application.
+--Each element describes one variable, where the sub elements are:
+--<ul>
+--/li File name
+--/li Scope
+--<ul>
+--/li Loop
+--/li Private
+--/li Global loop (top level loop variable)
+--/li Local
+--/li Global
+--</ul>
+--/li Variable name
+--/li Type
+--/li Variable id, if it exists (only variables which were previously assigned a 
+--variable id by a call to /var_id() will have a valid variable id)
+--</ul>
+
+--/topic Pass by reference
+--/parent RDS Incompatible Features
+--/info
+--
+--You can pass variables by reference to functions and procedures.  This means that
+--any modifications to the variable's value within the routine will be reflected in
+--other parts of the code.  To declare a parameter as pass by reference, it must by
+--preceded by an asterisk ('*'):
+--/code
+--ex:
+--    procedure foo( integer * bar )
+--        bar += bar
+--    end procedure
+--
+--    integer baz
+--    baz = 1
+--    foo( baz )
+--    ? baz
+--/endcode
+--Pass by reference only works with direct calls.  You cannot use call_proc() or call_func()
+--with pass by reference.
+
+--Tracing API
+----------------------------------------------------
+
+--/topic Tracing API
+--/info
+--OOEU's debugging features
+--
+--The interpreter is set up to use an external dll for tracing.  I did this because I want
+--to have a nice, windowed debugger, but I don't really want to bloat the interpreter 
+--itself with GUI code.  It should be relatively easy to make a built in debugger, and 
+--this exercise is left to the reader.  The dll name is currently hard coded to be
+--ooeu_trace.dll/so.  This may change in the future to use an ini file or possibly a 
+--command line switch.  Also, the point at which the debugger is loaded and initialized
+--is subject to change.
+--
+--The interpreter looks first for an environment variable named OOEU_DEBUGGER.  If found,
+--it will use this for the name of the debugger library to load.
+--
+--The dll must be written in euphoria, since it communicates using Euphoria native 
+--datatypes (E_OBJECT).  The dll must have an initialize() function, which receives
+--two parameters.  The first is a sequence of callbacks that comprise the API for
+--the debugger to use.  The second parameter is the list of file names.
+--
+--The callbacks are for the functions, respectively: 
+--/code
+--    get_value( sequence var_name ): not implemented
+--    get_symbols(): not implemented
+--    get_line(): not implemented
+--    get_lines(): returns the global sequence slist (all the lines in the app)
+--    set_break(): sets or removes a break point
+--    get_files(): gets the list of file names
+--    set_trace( integer on ): turns trace on or off: 
+--        0: turn of trace (like 'q' in RDS trace)
+--        1: turn on trace mode 1
+--        2: turn on trace mode 2
+--        3: turn on trace mode 3
+--        4: turn off trace for rest of program (like 'Q' in RDS trace)
+--        5: abort the program (like '!' in RDS trace)
+--    current_sub(): returns the symtab_index of the Current SubProgram
+--    get_pc(): Returns the program counter variable
+--    get_object(): Returns an object.  Used to send changed values back from the debugger.
+--    set_debug_io( integer setting ): Allows redirection of STDOUT to the debugger.  The debugger must
+--        provide a debug_io( object output ) function that will be called whenever STDOUT
+--        receives output from the OOEU code through a puts, print, printf or ? call
+--/endcode
+--Your initialize() function must return the callback to the function to be called when
+--a new line must be displayed.  This function should take an integer, which will be
+--the global line number (i.e., index into slist).  Once your function returns, the 
+--interpreter will continue to execute the next line.  The return value will be ignored.
+--
+--You must also create several global functions:<ul>
+--/li update_vars() opUPDATE_GLOBALS
+--/li erase_privates( integer sym ) opERASE_PRIVATE_NAMES
+--/li erase_symbol( integer sym ) opERASE_SYMBOL
+--/li display_var( integer sym ) opDISPLAY_VAR
+--/li hide_debugger()
+--</ul>
+
+--Tracing Module
+----------------------------------------------
+
+--/topic Tracing Module
+--/info
+--Using the included debugger
+--
+--This distribution comes with (at least) code for a tracing module, and possibly that 
+--code compiled.  The source files are named ooeu_trace.e, trace_screen.e and sprint.e.  
+--They require wxEuphoria v0.8.1 or greater to be translated and compiled.  You don't need
+--the source of wxEuphoria to use the compiled tracing module with OOEU.  You'll need to
+--put the debugger binaries in the platform appropriate place:
+--
+--  Windows      %EUDIR%\bin  (wxooeu.dll, ooeu_trace.dll)
+--  Linux        /usr/lib     (wxooeu.so,  ooeu_trace.so)
+--
+--Tracing commands are mostly similar to a standard RDS tracing session.  The following
+--are the keyboard commands available:
+--/code
+--	RETURN  Continue to the next statement
+--	q       Resume normal program execution until the next call to trace
+--	        from within the code or the next break point.
+--	Q       Stop all tracing until the program stops
+--	!       Abort the program and get an ex.err dump.
+--	?       Puts focus on the variable bar
+--	DOWN    Run past the current statement, skipping routine calls and loops
+--/endcode
+--Break points may be manually set anywhere in a file that has with trace on.
+--Click on the line number, and it will be highlighted.  If the program executes that 
+--line, the debugger will be invoked the same as if trace(1) were called.  Clicking
+--the number again removes the break point.  Break points should not be set on
+--'non-executable' statements such as routine declarations, blank lines, or comments
+--(basically, all lines that the tracer would normally skip over).
+--
+--The variable display can also accept simple subscripts (integers only).  If the subscript
+--is invalid, this will be displayed.  The values of subscripted entries will be updated
+--just like normal variables.
+--
+--Variable values can be changed dynamically.  Select the variable to be changed in the list,
+--then click on the 'Change' button, or type '='.  Normal and subscripted variables can be changed.  
+--A dialog will open with a text box containing the current value.  Make the alterations and 
+--click OK to save the changes.
+
+--TODO
+----------------------------------
+
+--/topic TODO
+--/info
+--What's in store for the future of OOEU (maybe)
+--<ul>
+--/li Improve trace
+--<ul>
+--/li View data members
+--/li Dynamic, immediate code execution
+--</ul>
+--/li Shorthand for assigning to an object the result of a method function: Instance@Method() -> Instance = Instance.Method()
+--/li C-style for statement: for( var = initial, var = continue_cond, var = iter() ) do
+--/li Enums or constants within classes?
+--/li Local / global euclass conflicts?
+--/li Shrouded includes
+--/li Chaining together method calls: Object.Method().Method2()...etc
+--/li Private / public members
+--/li VTable capability
+--/li Class RTTI-like capability
+--/li Mark routines as in-lineable
+--/li Preprocess find_from() and match_from() (at least when temporary sequences aren't to be searched)
+--</ul>
+
+--Binder and Shrouder Formats
+-----------------------------------------------
+
+--/topic Binder and Shrouder Formats
+--/info
+--How are shrouded files saved?
+--
+--There are two things saved when binding or shrouding (binding is just adding the shrouded
+--code to the end of the executable): the symbol table, and the list of line numbers.  The
+--symbol table (global sequence SymTab) holds all of the data and IL code.  The line numbers
+--(global sequence slist) give information for error dumps.  Normally, slist also holds the
+--actual text of each line, but this is currently not saved, unless the '-c' option is
+--used, and 'with trace' is turned on.
+--
+--These are stored in a simple binary format to save space and time.  The compress() and 
+--decompress() routines from database.e have been adapted to save Euphoria objects.  When the
+--required size of a data element is known in advance, only that many bytes are used.  If the
+--size may grow (i.e., symbol table entries) beyond a fixed amount, then the compression 
+--routines are used.  Following is the structure of a shrouded .oe file (see sequencef.e
+--for the details on reading/writing):
+--<ul>
+--/li 4 bytes: magic number
+--/li 1 byte: Shroud version
+--/li 1 byte: full_debug
+--/li 1 byte: eval in use (so need to rebuild the hash table, and need variable names)
+--/li Compressed number of entries
+--<ul> /li Each entry:
+--/li 1 byte length of final sequence (corresponds to SIZEOF_XXX_ENTRY constants in global.e)
+--/li If length > 0:
+--<ul><ul> /li Length = 5 (constant): compressed euphoria object
+--/li Length > 5 (routine or variable)
+--<ul> /li S_OBJ != NOVALUE: 1 & compressed euphoria object
+--/li 1 byte: 0
+--</ul></ul>
+--/li Compressed symtab_index of S_NEXT
+--/li 1 byte: S_MODE
+--/li 1 byte: S_SCOPE
+--/li If length > SIZEOF_CONSTANT:
+--<ul> /li 1 byte: S_FILE_NO
+--/li If full_debug or use_eval: Compressed S_NAME
+--/li Compressed S_TOKEN
+--/li Compressed S_VTYPE
+--/li If length > S_VTYPE
+--<ul> /li Compressed S_CODE
+--/li Compressed S_LINETAB
+--/li Compressed S_FIRSTLINE
+--/li Compressed S_TEMPS
+--/li 1 byte: S_NUM_ARGS
+--/li Compressed S_GOTO
+--/li Compressed S_BYREF
+--</ul></ul></ul></ul>
+--/li Compressed list of file names
+--/li Compressed length of global sequence slist
+--/li If full_debug = 1:
+--<ul> /li For each element of slist)
+--<ul> /li Compressed source line 
+--/li Compressed local line number 
+--/li Compressed file number</ul></ul>
+--/li If full_debug = 0:
+--<ul> /li Compressed number of entries
+--/li Each entry:
+--<ul> /li Compressed {file number, until line}.  This is used for trace backs so that
+--the correct line and file are identified.  Can save up to 20% on the size of
+--the shrouded file size.
+--</ul></ul></ul>
+--	
+--	 
+--When bound, this code is tacked onto the end of the executable that was run.  After this,
+--the absolute offset of the start of the bound code is written as a 4-byte integer, followed
+--by the text "oe bound executable".  Upon startup, the executable is checked to look for this
+--string, and if found, the shrouded code is loaded.
+--
+--Shrouded files are saved with an oe extension.  The interpreter checks the extension upon
+--startup, and loads the shrouded code rather than trying to parse the file.
+--
+--Before the shrouded code is saved, the interpreter attempts to remove as many unused constants,
+--routines and variables as possible.  Since the symbol table contains 'pointers' to different
+--entries, these deleted symbols have to be maintained.  The symbols are represented in the
+--shrouded symbol table as entries with a length of 0.
+
+--Disassembly
+-----------------------------------
+
+--/topic Disassembly
+--/info
+--Examining IL code
+--
+--You can 'disassemble' an ooeu program using dis.ex.  It takes one command line parameter,
+--which is the file name to be disassembled.  The file must be an ooeu shrouded file, with
+--an oe extension.  If the extension is omitted, dis.ex will append it.  The output will 
+--be sent to a file with the same base name as the shrouded file, but with a 'dis' extension
+--added.  The numerical il code is given for each subprogram (including TopLevel), along
+--with a mneumonic, assembler-like output on the right half of each line.
+--
+--Variables and literals are shown in square brackets.  After the name or value, a colon will
+--appear, followed by a number.  This number is the position of the symbol in the symbol table.
+--Goto labels appear on the left side in the place of the il index, followed by a colon.
+--Strings appear as quoted strings, while atoms appear as numbers, and variables appear
+--as the variable names.  Some constants are not assigned values at compile time (i.e., 
+--constants that are defined by an expression or a function call), so constants may appear
+--as strings or atoms or as the name of the constant.
+--
+--For a simple Hello, World application:
+--
+--/code
+--for i = 1 to 10 do
+--	puts( 1, "Hello, World!\n" )
+--end for
+--/endcode
+--
+--The disassembly looks like this:
+--/code
+--SubProgram [_toplevel_:00103]
+--     1: 125 106 107 106 103 105 16       # FOR_I: inc [LIT 1:106], lim [LIT 10:107], 
+--                                         #     initial [LIT 1:106], lv [i:105], jmp 0016
+--     8: 044 106 108                      # PUTS: [LIT 1:106], [LIT "Hello, World!\n":108]
+--    11: 054 8 107 105 106                # ENDFOR_INT_UP1: top 0008, lim: [LIT 10:107], 
+--                                         #     lv [i:105]
+--    16: 034                              # RETURNT:
+--End SubProgram [_toplevel_:00103]
+--/endcode
+
+--Known Bugs
+--------------------------------------
+
+--/topic Known Bugs
+--/info
+--Problems and issues that haven't been fixed
+--
+--<ul>
+--/li Private variables aren't hidden, so other routines can erroneously
+--try to use other routine's variables rather than giving an undeclared
+--compile error
+--/li The preprocessor may occaisonally emit incorrect code by incorrect offset, or
+--not replacing the correct tokens.
+--/li When tracing embedded code, the debugger might highlight the line above
+--the current line.
+--/li Using 'sequence of' is still buggy, and may not work correctly, either in 
+--execution of preprocessing.
+--</ul>
+
+
+
+
+-- Command Line Options
+----------------------
+
+--/topic Command Line Options
+--/info 
+--Using the features of OOEU
+--
+--Syntax:
+--/code
+--     exw eu.ex [-bcps] [-full_debug] [source_file]
+--     oexw [-bcps] [-full_debug] [source_file]
+--/endcode
+--<ul>
+--/li -b Bind to executable (you must be running from a translated and compiled executable)
+--/li -c Shrouds the code, and doesn't delete any symbols (useful for later disassembly with dis.ex
+--or translation by msil.ex)
+--/li -full_debug Leaves lines (where 'with trace' is in effect) and variable names when shrouding
+--/li -p Preprocess files to be RDS Euphoria compatible
+--/li -s Shroud files
+--</ul>
+
+
+
+-- goto
+---------------------------
+
+--/topic Using Gotos
+--/parent RDS Incompatible Features
+--/info
+--
+--You can use a goto in your ooeu programs by defining goto labels using a colon.  A goto label
+--can be any valid Euphoria expression.  A constant or variable
+--must be defined before the label is declared.  You can, however forward reference a goto label
+--(i.e., you can jump forward as well as backward--see below for exceptions to this).  
+--Goto labels have only local (i.e., within one file) and private (i.e., within one routine)
+--scoping, based on whether they occur inside a routine or as top-level code.  They cannot be global, 
+--and they cannot jump into or out of a routine.  There is no checking
+--for jumping into loops, though jumping into for loops is considered undefined, and should not be 
+--attempted.  While loops should pose no special problems, since there is no special loop variable defined
+--in a while loop.  Jumping out of a loop should cause no problems.
+--
+--Care should be taken if you define a goto label as as variable.  A literal or constant-defined label
+--will take precedence over a variable-defined label.  You cannot define multiple labels within the 
+--same scope with the same value (or with the same variable, though it won't cause an error if a variable
+--later takes on the same value as another label).  If multiple variable-defined labels have variables with
+--the same value, then the label that is declared earlier in the program will be the target.
+--
+--Labels are defined by using a colon (':') followed by the value (or a constant or variable).
+--If the label is a word, it must be enclosed in quotes.  A sequence (created using braces) can be
+--used, but if there is anything other than literals delimited by commas, the label is treated like
+--a variable, since it must be evaluated at run time, not compile time.  You cannot have a label
+--as the first statement after a function declaration, because it will be interpreted as a return
+--type.
+--/code
+--ex:
+--    -- Illegal:
+--    function foo( integer bar )
+--        :1
+--        return bar + 1
+--    end function
+--
+--    -- Legal:
+--    function foo( integer bar )
+--        integer x
+--        :1
+--        x = bar + 1
+--    end function
+--/endcode
+--Expressions are allowed (i.e., function calls, arithmetic, sequence concatenation, etc) when
+--defining labels.  They will be reevaluated each time program execution happens across them.
+--For instance, if you had an expression as a label at the top of a procedure, each time the procedure
+--is called, the label will be reevaluated.  It is faster to assign this result to a 
+--constant or other variable before making it a label.  Also, by assigning the label value to a variable
+--or constant, you can still forward reference the label.
+--/code
+--ex:
+--	object labelA
+--	procedure foo()
+--		goto "Label B"
+--		goto "Label A"
+--		
+--		:labelA
+--		-- This label is known as soon as labelA is assigned a value.
+--		puts(1, "Label A\n")
+--	
+--		:"Label " & "B"
+--		-- This label isn't known until it is executed in normal program flow
+--		-- during run-time.  The evaluation must happen each time the procedure
+--		-- is called.
+--		puts(1, "label B\n")
+--	
+--	end procedure
+--	labelA = "Label " & "A"
+--	foo()
+--/endcode
+--If a goto target is a literal
+--or a constant assigned a literal, and if a literal target exists (i.e., a target whose value is known
+--at compile time), then the goto will be 
+--optimized so that the label does not need to be looked up at run time.
+--
+--If a goto jumps past an abort() call or a return statement, you may get false warnings that the 
+--statements after the abort() or return will not be executed.
+--
+--The following demonstrates legal (though not necessarily recommended) uses of goto:
+--/code
+--  : "start"
+--  printf(1, ": \"%s\"\n", {"start"} )
+--  goto "spaghetti"
+--
+--  :1
+--  printf(1, ": %d\n", 1 )
+--  constant sequence_label = {1,{2}}
+--  goto {1,{2}}
+--  abort(0)
+--
+--  object label
+--
+--  : label
+--  printf( 1, ": %d\n", label )
+--  label = "end"
+--  goto label
+--
+--  : "spaghetti"
+--  printf( 1, ": \"%s\"\n", {"spaghetti"})
+--  label = 5
+--  goto 4 + 1
+--  
+--  : "end"
+--  printf(1,": \"%s\"\n",{"end"})
+--  goto 1
+--  
+--  : sequence_label
+--  puts(1, ": " ) print(1, {1,{2}}) puts(1,"\n")
+--/endcode
+
+--/topic Using Gotos
+--/keyword goto
+--
+--The syntax for using a goto is:
+--/code
+--    goto &lt;<i>target</i>&gt;
+--/endcode
+--/i target can be any valid Euphoria expression.
+
+
+--/topic Using Gotos
+--/keyword strict_goto
+--
+--This keyword is meant to be used with "with/without".  The default is for strict_goto
+--to be off.  This means that if goto is called with a non-existent label, execution
+--will continue with the next statement.  In code with strict_goto turned on, 
+--an invalid goto target will result in an error.
+
+--/topic Using Gotos
+--/func is_goto( object label )
+--
+--This function returns 1 if the specified label is a valid goto target, or zero
+--if it is not.
+
+--/topic Using Gotos
+--/proc default_goto( object label )
+--
+--This sets a default label to use if the supplied label does not match a valid
+--target.  If the default label is itself not a valid target, then the goto is
+--resolved based on the status of the /strict_goto directive.  The scope of
+--default gotos is confined to routines and files just like other labels.
+
+--Embedding
+----------------------------
+
+--/topic Embedding
+--/info
+--Using OOEU in applications
+--
+--You can use OOEU as an embeddable scripting engine for your applications (whether an OOEU or
+--a normal Euphoria application).  First, you'll need to include eu.e (instead of eu.ex) 
+--in your application.  Then use /embed_routine() to allow scripts to call routines inside of
+--your application, and use /illegal_builtin() to restrict scripts from calling certain builtin
+--routines.  Then you can use /do_eval() to run scripts.
+--
+--Alternatively, eu.e can be compiled into a dynamic library (see the libooeu.dll/so files provided
+--in the binary distribution) and use it that way in order to speed up your scripts' execution.
+--Instead of including eu.e, simply include libooeu.e, and use it exactly the same way that you would
+--use eu.e.
+
+
+--/topic Embedding
+--/func get_eval_err()
+--
+--This function will return a sequence containing information about the
+--error encountered.
+
+--/topic Embedding
+--/func do_eval( sequence eval_code )
+--
+--This is the function that will run embedded OOEU code.  The code
+--should be passed as a sequence of text with '\n's breaking up lines.
+--If a routine is passed, the entire routine should be passed at once,
+--or an error will result.  If any errors were encountered, the return
+--value will be zero.  If there were no errors, the return value will
+--be 1.
+
+--/topic Embedding
+--/func embed_routine( sequence name, integer rid, sequence params, integer is_func )
+--
+--This function is used to allow scripts to call routines in your application.  The
+--parameter values should be as follows:
+--<ul>
+--/li /b name  The name of the routine as it will be called from within the script.
+--/li /b rid   The routine_id of your routine in your application.
+--/li /b params A sequence indicating the proper parameters for your routine, where each
+--parameter is represented by the first letter of the variable type.  So "aaso" would mean
+--that two atoms, a sequence and an object would be passed.
+--/li /b is_func Denotes whether your routine is a function (1) or a procedure (0)
+--</ul>
+
+
+--/topic Embedding
+--/proc illegal_builtin( sequence builtin )
+--
+--This procedure can be used to remove the ability of evaluated code
+--from using builtin routines.  Pass the name of the builtin routine, or a
+--sequence of builtin routines, and if any code calls that routine, an 
+--illegal call error will occur.  See the predefined lists supplied in illegal.e.
+--For a full list of builtins that can be declared illegal, see keylist.e (with the addition
+--of the question mark: "?").
+
+--/topic Embedding
+--/proc cleanup_debugger()
+--
+--If your scripting uses the debugger, you should call this routine before your program
+--exits in order to cleanly shut down the debugger.  Failure to do so could cause a machine
+--exception to occur when your application closes.
+
+--/topic Embedding
+--/func get_current_env()
+--
+--Returns the handle for the currently active scripting environment.
+
+--/topic Embedding
+--/proc switch_env( integer env )
+--
+--Saves the current environment and switches to the specified environment.
+
+--/topic Embedding
+--/func new_env()
+--
+--Creates a new scripting environment.  The return value is the handle of the environment.
+--This environment will be completely separate from other scripting environments.  Note that
+--the initial environment is automatically set up for you.
+
+--/topic Embedding
+--/proc clear_env()
+--
+--Resets the current scripting environment.  This allows an application to recycle scripting
+--environments and avoid leaking resources by simply adding new scripting environments as
+--they are needed.

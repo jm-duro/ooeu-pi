@@ -1,0 +1,49 @@
+-- This demo demonstrates some uses of passing by reference, and changing the
+-- value of a variable outside of its normal scope.
+
+-- Use '*' to indicate parameters that are passed by reference
+procedure foo( integer *bar) 
+	-- After this assignment, the variable that was
+	-- passed to foo() will be set to 4
+	printf( 1, "Called foo( %d ) \n", bar )
+	bar = 4
+end procedure
+
+function baz( integer * foo )
+	-- Any normal operations are valid, and will be reflected 
+	-- in the passed variable.  The value can also be returned 
+	-- from a function.
+	foo += 3
+	return foo
+end function
+
+euclass bar( object a )
+	
+	-- By putting the '*' before the name of the method,
+	-- the instance itself can be modified.
+	procedure * blah()
+		this = 0
+		foo( this )
+	end procedure
+end euclass
+
+bar b
+b = {}
+puts( 1, "bar b = {}\n")
+b.blah()
+puts( 1, "After calling b.blah(), b = " )
+? b
+
+integer a
+a = 5
+printf( 1, "\ninteger a = %d\n", a )
+foo( a )
+printf( 1, "After calling foo(a),  a = %d\n", a )
+
+printf( 1, "\nThe return value of baz(a) = %d\n", baz(a) )
+printf( 1, "After calling baz(a),  a = %d\n", a )
+
+puts(1, "\nPress any key to exit...\n")
+if object(gets(0)) then
+	
+end if

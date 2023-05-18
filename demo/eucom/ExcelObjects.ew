@@ -1,0 +1,106 @@
+-- class wrappers for Excel / EuCOM / OOEU
+include eucom.ew
+include comclass.ew
+include EXCEL9.ew
+
+object void
+
+global euclass ExcelApplication( ActiveX a )
+	
+	procedure Visible( integer vis )
+		void = this.invoke( {Application_p_Visible, DISPID_PROPERTYPUT}, {vis}, {VT_I4}, DISPATCH_PROPERTYPUT)
+    end procedure
+    
+    procedure quit()
+    	object void
+    	void = this.invoke( Application_m_Quit, {}, {}, DISPATCH_METHOD )
+    end procedure
+    
+    global function Workbooks()
+    	atom wb
+    	wb = this.invoke(Application_p_Workbooks,{},{},DISPATCH_PROPERTYGET)
+    	if is_error(wb) then
+    		return 0
+    	end if
+    	return ref_com_object( Workbooks_clsid_ix, wb )
+    end function
+end euclass
+
+global euclass Workbooks( ActiveX w )
+	function Add()
+		atom wb
+		wb = this.invoke( {Workbooks_m_Add}, {}, {}, DISPATCH_METHOD )
+		return ref_com_object( Workbook_clsid_ix, wb  )	
+	end function
+end euclass
+
+global euclass Workbook( ActiveX w )
+	function Worksheets()
+		atom wss
+		wss = this.invoke(Workbook_p_Worksheets,{},{},DISPATCH_PROPERTYGET)
+    	if is_error(wss) then
+    		return 0
+    	end if		
+		return ref_com_object( Worksheets_clsid_ix, wss )
+	end function
+	
+	procedure Saved( integer saved )
+		void = this.invoke({Workbook_p_Saved, DISPID_PROPERTYPUT}, {saved}, {VT_I4}, DISPATCH_PROPERTYPUT )
+	end procedure
+	
+	procedure Saved( )
+		void = this.invoke( {Workbook_p_Saved}, {}, {}, DISPATCH_PROPERTYGET )
+	end procedure
+end euclass
+
+global euclass Worksheets( ActiveX w )
+	function Item( object item )
+		integer vt
+		atom ws
+		if sequence( item ) then
+			vt = VT_BSTR
+		else
+			vt = VT_I4
+		end if
+		ws = this.invoke(Worksheets_p_Item, item, vt, DISPATCH_PROPERTYGET)
+		if is_error(ws) then
+    		return 0
+    	end if		
+		ws = ref_com_object( Worksheet_clsid_ix, ws )
+		return ws
+	end function
+end euclass
+
+
+global euclass Range( ActiveX r )
+
+	procedure Value( sequence string )
+		atom ok
+		ok = this.invoke({Range_p_Value, DISPID_PROPERTYPUT}, string,VT_BSTR,DISPATCH_PROPERTYPUT)
+	end procedure
+	
+	procedure Value( Variant v )
+		atom ok
+		ok = this.invoke({Range_p_Value, DISPID_PROPERTYPUT}, {v.pval()}, {v.vt()}, DISPATCH_PROPERTYPUT )
+	end procedure
+	
+	procedure Value( atom v, atom vt )
+		atom ok
+		ok = this.invoke({Range_p_Value, DISPID_PROPERTYPUT}, v, vt, DISPATCH_PROPERTYPUT )
+	end procedure
+		
+	function Value()
+		return this.invoke( Range_p_Value,{},{}, DISPATCH_PROPERTYGET )
+	end function
+	
+end euclass
+
+global euclass WorkSheet( ActiveX ws )
+	function range( sequence cells )
+		return this.invoke( { "Range", "Cell1" }, cells, VT_BSTR, DISPATCH_PROPERTYGET )
+	end function
+	
+	function range( sequence cell1, sequence cell2 )
+		return this.invoke( { "Range", "Cell1", "Cell2" }, {cell1,cell2}, {VT_BSTR,VT_BSTR}, DISPATCH_PROPERTYGET )
+	end function
+end euclass

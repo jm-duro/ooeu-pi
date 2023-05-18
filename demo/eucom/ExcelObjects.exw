@@ -1,0 +1,201 @@
+without warning
+
+-- This demo requires Object Oriented Euphoria v1.9.0 and win32lib to run 
+--(or use the already preprocessed version: ExcelObjects_.exw)
+
+include win32lib.ew
+include eucom.ew
+include excel9.ew
+include comclass.ew
+with trace
+include ExcelObjects.ew
+
+procedure com_error_handler( atom err, sequence msg )
+	integer ok
+	if not is_error( err ) then
+		return
+	end if
+	ok = message_box( sprintf("Error %d: %s", {err, msg}), "COM Error", MB_ICONERROR )
+end procedure
+
+object void, bstr
+
+-- Create the window using win32lib
+constant
+Win = create( Window, "Excel Demo", 0, 200, 200, 160, 250, 0 ),
+TextEdit = create( MleText, "<enter text here>", Win, 10, 30, 120, 60, 0 ),
+ColLable = create( LText, "Row #", Win, 10, 95, 50, 20, 0 ),
+RowLable = create( LText, "Col #", Win, 70, 95, 50, 20, 0 ),
+RowEdit = create( EditText, "1", Win, 10, 115, 50, 30, ES_NUMERIC ),
+ColEdit = create( EditText, "1", Win, 70, 115, 50, 30, ES_NUMERIC ),
+DoIt = create( PushButton, "Update", Win, 10, 150, 120, 30, 0 ),
+GetIt = create( PushButton, "Get", Win, 10, 190, 120, 30, 0 )
+
+-- use these for our objects...
+ExcelApplication App
+WorkSheet ws
+Workbooks wbs
+Workbook wb
+Worksheets wss
+object ok
+
+-- Start up Excel.  It will be invisible to start, so we need to make it visible.  If you don't 
+-- do this, and do not call Application.Quit before the program ends, you'll end up with an invisible
+-- Excel running in the background, and will need to kill it using TaskManager.
+App = ActiveX.active( 0, Application_clsid_ix )
+if not App then
+    App = create_com_object( Application_clsid_ix )
+end if
+App.Visible( -1 )
+
+-- We ultimately want to get at a Worksheet, but need to first get the Workbooks collection, then
+-- create a Workbook, then get its Worksheets collection, then get the specific Worksheet (see Excel
+-- documentation for the specifics on the object model).
+-- Note that I use ref_com_object here, since App passes back pointers to the objects.  By doing this,
+-- EuCOM will take care of certain housekeeping issues for me, and it's simpler to call invoke().
+wbs = App.Workbooks()
+if not wbs then
+	abort(1)
+end if
+
+wb = wbs.Add()
+if not wb then
+	? 1/0
+end if
+
+wss = wb.Worksheets()
+if not wss then
+	? 1/0
+end if
+
+ws = wss.Item(1)
+if not ws then
+	? 1/0
+end if
+
+function rc_to_cell( integer row, integer col )
+	sequence cell
+	cell = ""
+	if col > 26 then
+		cell &= floor( col / 26 ) + 'A' - 1
+	end if
+	cell &= (remainder( col, 26 ) + 'A' - 1) & sprint(row)
+	return cell
+end function
+
+procedure do_it(atom id, atom msg, sequence params)
+    SafeArray array
+    Bstr bstr
+    sequence cell, text, str
+	Range range
+	integer col, base
+
+    -- get the cell row and column numbers, and format into a string
+    cell = "A1:" & rc_to_cell(getNumber( RowEdit ), getNumber( ColEdit ) )
+    
+    range = ws.range( cell )
+    if is_error( range ) then
+    	return
+    end if
+    
+    range = range.indirect()
+    
+	text = getText( TextEdit )
+	text = repeat( repeat( text, getNumber( ColEdit ) ), getNumber( RowEdit ) )
+	for i = 1 to length(text) do
+		for j = 1 to length(text[1]) do
+			text[i][j] = Bstr.alloc( text[i][j] )
+		end for
+
+	end for
+
+	array = SafeArray.create( text, VT_BSTR )
+
+    -- get the text to put in and set the value for the range
+    range.Value( array, VT_VARIANT + VT_ARRAY )
+    
+    -- free the range and array and avoid memory leaks
+	void = range.release()
+	com_error(destroy_safearray( array ))
+end procedure
+setHandler( DoIt, w32HClick,  routine_id("do_it"))
+
+procedure get_it(atom id, atom msg, sequence params)
+    atom array, row, col
+    Range range
+    sequence cell1, cell2, text
+    object val
+    
+    -- get the cell row and column numbers, and format into a string
+    row = getNumber( RowEdit )
+    col = getNumber( ColEdit )
+    cell1 = "A1"
+    cell2 = rc_to_cell( row, col )
+
+    -- get a range object for that cell--Excel seems to want named variables
+    range = COM.indirect( ws.range( cell1, cell2 ) )
+
+    -- get the array of values
+    val = range.Value()
+
+    if atom(val) then
+        val = {{val}}
+    end if
+    text = ""
+    for i = 1 to length(val) do
+    	if sequence( val[i] ) then
+	        for j = 1 to length(val[i]) do
+	            if atom(val[i][j]) then
+	                val[i][j] = sprint(val[i][j])
+	            end if
+	            text &= val[i][j] & 32
+	        end for
+	        text &= "\r\n"
+	     else
+	     	text &= val[i] & "\r\n"
+	     end if
+    end for
+    setText( TextEdit, text )
+end procedure
+setHandler( GetIt, w32HClick,  routine_id("get_it"))
+
+integer change_flag
+change_flag = 0
+
+procedure AppEvents_SheetChange_proc( atom this, atom Sh, atom Target )
+
+    -- gets sent twice, for some reason...
+    if change_flag then
+        void = message_box( "Successfully changed!","SheetChange",0)
+    end if
+    change_flag = 1 - change_flag
+end procedure
+--com_event_routine( App, AppEvents_SheetChange, routine_id("AppEvents_SheetChange_proc"))
+
+
+procedure close_win( atom id, atom msg, sequence params)
+    -- close Excel and cleanup COM stuff before we exit
+    wb.Saved( -1 )
+    App.quit()
+end procedure
+setHandler( Win, w32HClose, routine_id("close_win"))
+
+
+
+
+function excel_crash( object o )
+	App.quit()
+	release_com()
+	puts(2, "The demo crashed...\n")
+	return 0
+end function
+
+if routine_id("crash_routine") != -1 then
+	call_proc( routine_id("crash_routine"), {routine_id("excel_crash")})
+end if
+com_err_out( - routine_id("com_error_handler"))
+
+WinMain( Win, Normal )
+release_com()
+
+
